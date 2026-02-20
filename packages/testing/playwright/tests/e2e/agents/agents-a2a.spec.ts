@@ -418,12 +418,12 @@ test.describe('Agent Task Execution', () => {
 		const task = await unwrap<{ status: string; message: string }>(response);
 
 		expect(task.status).toBe('error');
-		expect(task.message).toContain('No LLM API key available');
+		expect(task.message).toContain('No LLM API key available. Provide keys.llm');
 	});
 });
 
-test.describe('BYOK (Bring Your Own Key)', () => {
-	test('should execute task using caller-provided LLM key', async ({
+test.describe('BYOK/BYOC (Bring Your Own Keys)', () => {
+	test('should execute task using caller-provided LLM key via keys.llm', async ({
 		agent,
 		agentProject,
 		agentLlmApiKey,
@@ -476,11 +476,10 @@ test.describe('BYOK (Bring Your Own Key)', () => {
 
 		await api.workflows.transfer(workflow.id, agentProject.id);
 
-		// Pass the LLM key in the request body instead of relying on server env var
 		const response = await externalRequest.post(`/rest/agents/${agent.id}/task`, {
 			data: {
 				prompt: `Execute the workflow named "${workflowName}" and report the result.`,
-				llmApiKey: agentLlmApiKey,
+				keys: { llm: agentLlmApiKey },
 			},
 		});
 
@@ -500,7 +499,7 @@ test.describe('BYOK (Bring Your Own Key)', () => {
 		expect(executionStep!.workflowName).toBe(workflowName);
 	});
 
-	test('should stream SSE events using caller-provided LLM key', async ({
+	test('should stream SSE events using caller-provided keys', async ({
 		agent,
 		agentProject,
 		agentLlmApiKey,
@@ -563,7 +562,7 @@ test.describe('BYOK (Bring Your Own Key)', () => {
 			},
 			body: JSON.stringify({
 				prompt: `Execute the workflow named "${workflowName}" and report the result.`,
-				llmApiKey: agentLlmApiKey,
+				keys: { llm: agentLlmApiKey },
 			}),
 		});
 
@@ -581,18 +580,106 @@ test.describe('BYOK (Bring Your Own Key)', () => {
 		expect(doneEvent.status).toBe('completed');
 	});
 
-	test('should reject task with invalid caller-provided LLM key', async ({
-		agent,
-		externalRequest,
-	}) => {
+	test('should reject task with invalid keys.llm', async ({ agent, externalRequest }) => {
 		const response = await externalRequest.post(`/rest/agents/${agent.id}/task`, {
 			data: {
 				prompt: 'Hello',
-				llmApiKey: 'sk-invalid-key-that-should-fail',
+				keys: { llm: 'sk-invalid-key-that-should-fail' },
 			},
 		});
 
-		// The LLM call fails with invalid key — n8n surfaces this as a 500
 		expect(response.status()).toBe(500);
+	});
+
+	test('should pass BYOC keys through to workflow and call external API', async ({
+		agent,
+		agentProject,
+		agentLlmApiKey,
+		testCredentials,
+		api,
+		externalRequest,
+	}) => {
+		test.skip(!agentLlmApiKey, 'N8N_AGENT_LLM_API_KEY not set — skipping LLM tests');
+		test.skip(!testCredentials.currents, 'TEST_CREDENTIAL_CURRENTS not set — skipping BYOC test');
+		test.setTimeout(180_000);
+
+		await api.projects.addUserToProject(agentProject.id, agent.id, 'project:editor');
+
+		// Workflow: Manual Trigger → HTTP Request (Currents API) using keys.currents
+		const workflowName = `BYOC Currents Workflow ${nanoid(8)}`;
+		const workflow = await api.workflows.createWorkflow({
+			name: workflowName,
+			nodes: [
+				{
+					id: nanoid(),
+					name: 'When clicking "Test workflow"',
+					type: 'n8n-nodes-base.manualTrigger',
+					typeVersion: 1,
+					position: [250, 300],
+					parameters: {},
+				},
+				{
+					id: nanoid(),
+					name: 'Get Currents Projects',
+					type: 'n8n-nodes-base.httpRequest',
+					typeVersion: 4.2,
+					position: [450, 300],
+					parameters: {
+						url: 'https://api.currents.dev/v1/projects',
+						method: 'GET',
+						sendQuery: true,
+						queryParameters: {
+							parameters: [{ name: 'limit', value: '1' }],
+						},
+						sendHeaders: true,
+						headerParameters: {
+							parameters: [
+								{
+									name: 'Authorization',
+									value: '=Bearer {{ $json.keys.currents }}',
+								},
+							],
+						},
+					},
+				},
+			],
+			connections: {
+				'When clicking "Test workflow"': {
+					main: [[{ node: 'Get Currents Projects', type: 'main', index: 0 }]],
+				},
+			},
+		});
+
+		await api.workflows.transfer(workflow.id, agentProject.id);
+
+		const response = await externalRequest.post(`/rest/agents/${agent.id}/task`, {
+			data: {
+				prompt: `Execute the workflow named "${workflowName}" and report the result.`,
+				keys: { llm: agentLlmApiKey, currents: testCredentials.currents },
+			},
+		});
+
+		expect(response.ok()).toBe(true);
+
+		const task = await unwrap<{
+			status: string;
+			summary: string;
+			steps: Array<{ action: string; workflowName?: string; result?: string }>;
+		}>(response);
+
+		// eslint-disable-next-line no-console
+		console.log('\n--- BYOC Task Result ---');
+		// eslint-disable-next-line no-console
+		console.log(`  Status: ${task.status}`);
+		// eslint-disable-next-line no-console
+		console.log(`  Summary: ${task.summary}`);
+		// eslint-disable-next-line no-console
+		console.log('--- End BYOC ---\n');
+
+		expect(task.status).toBe('completed');
+
+		const executionStep = task.steps.find((s) => s.action === 'execute_workflow');
+		expect(executionStep).toBeTruthy();
+		expect(executionStep!.result).toBe('success');
 	});
 });

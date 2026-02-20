@@ -248,16 +248,14 @@ export class AgentsController {
 
 	@Post('/:agentId/task', { apiKeyAuth: true })
 	async dispatchTask(req: AuthenticatedRequest, res: Response, @Param('agentId') agentId: string) {
-		const { prompt, llmApiKey } = req.body as { prompt: string; llmApiKey?: string };
+		const { prompt, keys } = req.body as {
+			prompt: string;
+			keys?: Record<string, string>;
+		};
 		const wantsStream = req.headers.accept?.includes('text/event-stream');
 
 		if (!wantsStream) {
-			return await this.executeAgentTask(
-				agentId,
-				prompt,
-				{ remaining: MAX_ITERATIONS },
-				{ llmApiKey },
-			);
+			return await this.executeAgentTask(agentId, prompt, { remaining: MAX_ITERATIONS }, { keys });
 		}
 
 		res.writeHead(200, {
@@ -270,7 +268,7 @@ export class AgentsController {
 			agentId,
 			prompt,
 			{ remaining: MAX_ITERATIONS },
-			{ onStep: (event) => sseWrite(res, event), llmApiKey },
+			{ onStep: (event) => sseWrite(res, event), keys },
 		);
 
 		sseWrite(res, { type: 'done', status: result.status, summary: result.summary });
@@ -282,9 +280,9 @@ export class AgentsController {
 		agentId: string,
 		prompt: string,
 		budget: IterationBudget,
-		options?: { onStep?: StepCallback; llmApiKey?: string },
+		options?: { onStep?: StepCallback; keys?: Record<string, string> },
 	): Promise<{ status: string; summary?: string; steps: TaskStep[]; message?: string }> {
-		const { onStep, llmApiKey } = options ?? {};
+		const { onStep, keys } = options ?? {};
 
 		const agentUser = await this.userRepository.findOne({
 			where: { id: agentId },
@@ -295,12 +293,12 @@ export class AgentsController {
 			throw new NotFoundError(`Agent ${agentId} not found`);
 		}
 
-		const effectiveLlmKey = llmApiKey || LLM_API_KEY;
+		const effectiveLlmKey = keys?.llm || LLM_API_KEY;
 		if (!effectiveLlmKey) {
 			return {
 				status: 'error',
 				message:
-					'No LLM API key available. Provide llmApiKey in the request body or set N8N_AGENT_LLM_API_KEY.',
+					'No LLM API key available. Provide keys.llm in the request body or set N8N_AGENT_LLM_API_KEY.',
 				steps: [],
 			};
 		}
@@ -392,7 +390,7 @@ export class AgentsController {
 				});
 
 				try {
-					const result = await this.runWorkflow(agentUser, parsed.workflowId, prompt);
+					const result = await this.runWorkflow(agentUser, parsed.workflowId, prompt, keys);
 					const observation = `Workflow "${workflowName}" executed. Result: ${jsonStringify(result).slice(0, 2000)}`;
 					const stepResult = result.success ? 'success' : 'failed';
 					steps[steps.length - 1].result = stepResult;
@@ -461,7 +459,7 @@ export class AgentsController {
 					try {
 						const result = await this.executeAgentTask(targetAgent.id, parsed.message, budget, {
 							onStep,
-							llmApiKey,
+							keys,
 						});
 						const observation = `Agent "${parsed.toAgent}" responded: ${result.summary ?? 'No summary'}`;
 						const stepResult = result.status === 'completed' ? 'success' : 'failed';
@@ -508,6 +506,7 @@ export class AgentsController {
 		user: User,
 		workflowId: string,
 		agentPrompt?: string,
+		keys?: Record<string, string>,
 	): Promise<{ success: boolean; executionId: string; data?: unknown }> {
 		const workflow = await this.workflowFinderService.findWorkflowForUser(
 			workflowId,
@@ -530,7 +529,7 @@ export class AgentsController {
 			);
 		}
 
-		const pinData = buildPinData(triggerNode, agentPrompt);
+		const pinData = buildPinData(triggerNode, agentPrompt, keys);
 
 		const runData: IWorkflowExecutionDataProcess = {
 			executionMode: getExecutionMode(triggerNode),
@@ -594,7 +593,9 @@ function getExecutionMode(node: INode): WorkflowExecuteMode {
 	}
 }
 
-function buildPinData(node: INode, agentPrompt?: string): IPinData {
+function buildPinData(node: INode, agentPrompt?: string, keys?: Record<string, string>): IPinData {
+	const keysData = keys && Object.keys(keys).length > 0 ? { keys } : {};
+
 	switch (node.type) {
 		case MANUAL_TRIGGER_NODE_TYPE:
 			return {
@@ -604,13 +605,14 @@ function buildPinData(node: INode, agentPrompt?: string): IPinData {
 							triggeredByAgent: true,
 							timestamp: new Date().toISOString(),
 							...(agentPrompt ? { message: agentPrompt } : {}),
+							...keysData,
 						},
 					},
 				],
 			};
 		case WEBHOOK_NODE_TYPE:
 			return {
-				[node.name]: [{ json: { headers: {}, query: {}, body: {} } }],
+				[node.name]: [{ json: { headers: {}, query: {}, body: {}, ...keysData } }],
 			};
 		case CHAT_TRIGGER_NODE_TYPE:
 			return {
@@ -620,6 +622,7 @@ function buildPinData(node: INode, agentPrompt?: string): IPinData {
 							sessionId: `agent-${Date.now()}`,
 							action: 'sendMessage',
 							chatInput: 'Triggered by agent',
+							...keysData,
 						},
 					},
 				],
@@ -631,6 +634,7 @@ function buildPinData(node: INode, agentPrompt?: string): IPinData {
 						json: {
 							submittedAt: new Date().toISOString(),
 							formMode: 'agent',
+							...keysData,
 						},
 					},
 				],
@@ -642,6 +646,7 @@ function buildPinData(node: INode, agentPrompt?: string): IPinData {
 						json: {
 							timestamp: new Date().toISOString(),
 							triggeredByAgent: true,
+							...keysData,
 						},
 					},
 				],

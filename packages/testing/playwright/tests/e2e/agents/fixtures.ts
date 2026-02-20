@@ -8,8 +8,27 @@ import type { ApiKey } from '../../../services/public-api-helper';
 
 const N8N_AGENT_LLM_API_KEY = process.env.N8N_AGENT_LLM_API_KEY ?? '';
 
+/**
+ * Resolve test credentials from TEST_CREDENTIAL_<KEY> env vars.
+ * e.g. TEST_CREDENTIAL_CURRENTS=xxx → { currents: 'xxx' }
+ *      TEST_CREDENTIAL_LINEAR=yyy   → { linear: 'yyy' }
+ */
+function resolveTestCredentials(): Record<string, string> {
+	const prefix = 'TEST_CREDENTIAL_';
+	const credentials: Record<string, string> = {};
+
+	for (const [key, value] of Object.entries(process.env)) {
+		if (key.startsWith(prefix) && value) {
+			credentials[key.slice(prefix.length).toLowerCase()] = value;
+		}
+	}
+
+	return credentials;
+}
+
 type AgentFixtures = {
 	agentLlmApiKey: string;
+	testCredentials: Record<string, string>;
 	agent: AgentResponse;
 	agentProject: Project;
 	ownerApiKey: ApiKey;
@@ -37,6 +56,10 @@ export const agentTestConfig = {
 export const test = base.extend<AgentFixtures>({
 	agentLlmApiKey: async ({}, use) => {
 		await use(N8N_AGENT_LLM_API_KEY);
+	},
+
+	testCredentials: async ({}, use) => {
+		await use(resolveTestCredentials());
 	},
 
 	agent: async ({ api }, use) => {
