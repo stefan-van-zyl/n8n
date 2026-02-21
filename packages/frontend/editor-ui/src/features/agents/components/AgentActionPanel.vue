@@ -121,12 +121,19 @@ function stepStatusIcon(status: string) {
 							@keydown.enter="saveName"
 							@keydown.escape="cancelEditName"
 						/>
-						<N8nButton size="mini" type="tertiary" aria-label="Save name" @click="saveName">
+						<N8nButton
+							size="mini"
+							type="tertiary"
+							icon-only
+							aria-label="Save name"
+							@click="saveName"
+						>
 							<N8nIcon icon="check" size="xsmall" />
 						</N8nButton>
 						<N8nButton
 							size="mini"
 							type="tertiary"
+							icon-only
 							aria-label="Cancel editing name"
 							@click="cancelEditName"
 						>

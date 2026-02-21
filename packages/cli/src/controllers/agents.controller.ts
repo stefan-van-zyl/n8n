@@ -78,19 +78,21 @@ export class AgentsController {
 		@Param('agentId') agentId: string,
 		@Body payload: DispatchTaskDto,
 	) {
-		await this.agentsService.enforceAccessLevel(agentId, req.user.id);
+		await this.agentsService.enforceAccessLevel(agentId, req.user);
 
 		const { prompt, externalAgents } = payload;
 		const wantsStream = req.headers.accept?.includes('text/event-stream');
 		const callChain = new Set<string>();
 
 		if (!wantsStream) {
-			return await this.agentsService.executeAgentTask(
+			const result = await this.agentsService.executeAgentTask(
 				agentId,
 				prompt,
 				{ remaining: MAX_ITERATIONS },
 				{ externalAgents: externalAgents as ExternalAgentConfig[] | undefined, callChain },
 			);
+			res.json(result);
+			return undefined;
 		}
 
 		res.writeHead(200, {

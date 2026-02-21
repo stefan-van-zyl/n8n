@@ -25,7 +25,7 @@ function makeAgentDto(overrides: Partial<AgentDto> = {}): AgentDto {
 		email: 'agent-test@internal.n8n.local',
 		avatar: null,
 		description: null,
-		agentAccessLevel: 'open',
+		agentAccessLevel: 'external',
 		...overrides,
 	};
 }
@@ -76,18 +76,18 @@ describe('AgentsController', () => {
 
 	describe('createAgent', () => {
 		it('should delegate to service and return result', async () => {
-			const dto = makeAgentDto({ description: 'Test desc', agentAccessLevel: 'open' });
+			const dto = makeAgentDto({ description: 'Test desc', agentAccessLevel: 'external' });
 			agentsService.createAgent.mockResolvedValue(dto);
 
 			const result = await controller.createAgent(mock(), mock<Response>(), {
 				firstName: 'TestAgent',
 				description: 'Test desc',
-				agentAccessLevel: 'open',
+				agentAccessLevel: 'external',
 			} as never);
 
 			expect(agentsService.createAgent).toHaveBeenCalled();
 			expect(result.description).toBe('Test desc');
-			expect(result.agentAccessLevel).toBe('open');
+			expect(result.agentAccessLevel).toBe('external');
 		});
 	});
 
@@ -123,7 +123,7 @@ describe('AgentsController', () => {
 				agentId: 'agent-1',
 				agentName: 'TestAgent',
 				description: 'A helpful agent',
-				agentAccessLevel: 'open' as const,
+				agentAccessLevel: 'external' as const,
 				llmConfigured: true,
 				projects: [] as Array<{ id: string; name: string }>,
 				workflows: [] as Array<{ id: string; name: string; active: boolean }>,
@@ -134,7 +134,7 @@ describe('AgentsController', () => {
 			const result = await controller.getCapabilities(mock(), mock<Response>(), 'agent-1');
 
 			expect(result.description).toBe('A helpful agent');
-			expect(result.agentAccessLevel).toBe('open');
+			expect(result.agentAccessLevel).toBe('external');
 			expect(result.llmConfigured).toBe(true);
 		});
 
@@ -218,7 +218,7 @@ describe('AgentsController', () => {
 				prompt: 'Do something',
 			} as never);
 
-			expect(agentsService.enforceAccessLevel).toHaveBeenCalledWith('agent-1', 'caller-1');
+			expect(agentsService.enforceAccessLevel).toHaveBeenCalledWith('agent-1', req.user);
 		});
 
 		it('should return JSON for non-stream requests', async () => {
@@ -227,12 +227,13 @@ describe('AgentsController', () => {
 			agentsService.executeAgentTask.mockResolvedValue(taskResult);
 
 			const req = makeAuthReq('application/json');
+			const res = mock<Response>();
 
-			const result = await controller.dispatchTask(req, mock<Response>(), 'agent-1', {
+			await controller.dispatchTask(req, res, 'agent-1', {
 				prompt: 'Test',
 			} as never);
 
-			expect(result).toEqual(taskResult);
+			expect(res.json).toHaveBeenCalledWith(taskResult);
 		});
 
 		it('should write SSE headers for stream requests', async () => {

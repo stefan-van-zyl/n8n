@@ -23,6 +23,8 @@ import {
 	type WorkflowExecuteMode,
 } from 'n8n-workflow';
 
+import { hasGlobalScope } from '@n8n/permissions';
+
 import { ActiveExecutions } from '@/active-executions';
 import { validateExternalAgentUrl } from '@/agents/validate-agent-url';
 import { CredentialsService } from '@/credentials/credentials.service';
@@ -116,7 +118,7 @@ export class AgentsService {
 	async createAgent(payload: {
 		firstName: string;
 		description?: string;
-		agentAccessLevel?: 'open' | 'internal' | 'closed';
+		agentAccessLevel?: 'external' | 'internal' | 'closed';
 		avatar?: string | null;
 	}): Promise<AgentDto> {
 		const email = `agent-${crypto.randomUUID().slice(0, 8)}@internal.n8n.local`;
@@ -146,7 +148,7 @@ export class AgentsService {
 			firstName?: string;
 			avatar?: string | null;
 			description?: string;
-			agentAccessLevel?: 'open' | 'internal' | 'closed';
+			agentAccessLevel?: 'external' | 'internal' | 'closed';
 		},
 	): Promise<AgentDto> {
 		const agent = await this.userRepository.findOneBy({ id: agentId });
@@ -269,7 +271,7 @@ export class AgentsService {
 		};
 	}
 
-	async enforceAccessLevel(agentId: string, callerId: string): Promise<void> {
+	async enforceAccessLevel(agentId: string, caller: User): Promise<void> {
 		const agentUser = await this.userRepository.findOne({
 			where: { id: agentId, type: 'agent' },
 		});
@@ -279,33 +281,41 @@ export class AgentsService {
 		}
 
 		if (agentUser.agentAccessLevel === 'closed') {
+			if (hasGlobalScope(caller, ['chatHubAgent:execute'])) return;
+			if (await this.sharesProject(caller.id, agentId)) return;
 			throw new NotFoundError(`Agent ${agentId} not found`);
 		}
 
-		if (agentUser.agentAccessLevel === 'internal') {
-			const callerRelations = await this.projectRelationRepository.findAllByUser(callerId);
-			const agentRelations = await this.projectRelationRepository.findAllByUser(agentId);
-			const callerProjectIds = new Set(callerRelations.map((r) => r.projectId));
-			const sharesProject = agentRelations.some((r) => callerProjectIds.has(r.projectId));
-
-			if (!sharesProject) {
-				throw new ForbiddenError('You do not have access to this agent.');
-			}
+		// External agents: any authenticated caller
+		if (agentUser.agentAccessLevel === 'external' || agentUser.agentAccessLevel === null) {
+			return;
 		}
+
+		// Internal agents: admin or project membership
+		if (hasGlobalScope(caller, ['chatHubAgent:execute'])) return;
+		if (await this.sharesProject(caller.id, agentId)) return;
+		throw new ForbiddenError('You do not have access to this agent.');
+	}
+
+	private async sharesProject(userId: string, agentId: string): Promise<boolean> {
+		const callerRelations = await this.projectRelationRepository.findAllByUser(userId);
+		const agentRelations = await this.projectRelationRepository.findAllByUser(agentId);
+		const callerProjectIds = new Set(callerRelations.map((r) => r.projectId));
+		return agentRelations.some((r) => callerProjectIds.has(r.projectId));
 	}
 
 	private async resolveLlmConfig(agentUser: User): Promise<LlmConfig> {
 		const credentials = await this.credentialsService.getMany(agentUser, {
 			includeGlobal: false,
+			includeData: true,
 		});
 
 		const anthropicCred = credentials.find((c) => c.type === 'anthropicApi');
 
 		if (anthropicCred) {
-			const decrypted = this.credentialsService.decrypt(anthropicCred, true);
-			const data = decrypted as { apiKey?: string; url?: string };
+			const data = anthropicCred.data as { apiKey?: string; url?: string } | undefined;
 
-			if (data.apiKey) {
+			if (data?.apiKey) {
 				return {
 					apiKey: data.apiKey,
 					baseUrl: data.url || LLM_BASE_URL,
@@ -562,6 +572,7 @@ export class AgentsService {
 						});
 					} else {
 						try {
+							await this.enforceAccessLevel(targetAgent.id, agentUser);
 							const result = await this.executeAgentTask(targetAgent.id, parsed.message, budget, {
 								onStep,
 								callChain,

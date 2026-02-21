@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
+import { BROWSER_ID_STORAGE_KEY } from '@n8n/constants';
 import { makeRestApiRequest } from '@n8n/rest-api-client';
 import { useRootStore } from '@n8n/stores/useRootStore';
 import { useAgentsStore } from './agents.store';
@@ -228,6 +229,7 @@ export const useAgentPanelStore = defineStore('agentPanel', () => {
 				headers: {
 					'Content-Type': 'application/json',
 					Accept: 'text/event-stream',
+					'browser-id': localStorage.getItem(BROWSER_ID_STORAGE_KEY) ?? '',
 				},
 				credentials: 'include',
 				body: JSON.stringify(body),

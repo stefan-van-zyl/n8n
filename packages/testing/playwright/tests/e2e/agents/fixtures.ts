@@ -48,7 +48,7 @@ export const test = base.extend<AgentFixtures>({
 		const agent = await api.agents.createAgent({
 			firstName: `TestAgent-${nanoid(8)}`,
 			description: 'E2E test agent for A2A compliance testing',
-			agentAccessLevel: 'open',
+			agentAccessLevel: 'external',
 		});
 
 		await use(agent);

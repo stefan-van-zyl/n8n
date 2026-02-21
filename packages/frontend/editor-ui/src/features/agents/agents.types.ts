@@ -27,7 +27,7 @@ export interface UserResponse {
 	type?: string;
 	avatar?: string | null;
 	description?: string | null;
-	agentAccessLevel?: 'open' | 'internal' | 'closed' | null;
+	agentAccessLevel?: 'external' | 'internal' | 'closed' | null;
 }
 
 export interface ZoneLayout {
@@ -49,7 +49,7 @@ export interface AgentCapabilitiesResponse {
 	agentId: string;
 	agentName: string;
 	description?: string | null;
-	agentAccessLevel?: 'open' | 'internal' | 'closed' | null;
+	agentAccessLevel?: 'external' | 'internal' | 'closed' | null;
 	llmConfigured: boolean;
 	projects: Array<{ id: string; name: string }>;
 	workflows: Array<{ id: string; name: string; active: boolean }>;

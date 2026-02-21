@@ -26,7 +26,7 @@ export = {
 			const agentsService = Container.get(AgentsService);
 			const agentId = req.params.id;
 
-			await agentsService.enforceAccessLevel(agentId, req.user.id);
+			await agentsService.enforceAccessLevel(agentId, req.user);
 
 			const { prompt, externalAgents } = req.body as {
 				prompt: string;

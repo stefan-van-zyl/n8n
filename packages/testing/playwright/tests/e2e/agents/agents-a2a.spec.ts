@@ -450,7 +450,7 @@ test.describe.skip('Agent Cross-Instance Delegation', () => {
 		const agentB = await api.agents.createAgent({
 			firstName: `DocsBot-${nanoid(8)}`,
 			description: 'Knowledge base manager',
-			agentAccessLevel: 'open',
+			agentAccessLevel: 'external',
 		});
 		await api.projects.addUserToProject(agentProject.id, agentA.id, 'project:editor');
 		await api.projects.addUserToProject(agentProject.id, agentB.id, 'project:editor');
@@ -555,7 +555,7 @@ test.describe.skip('Agent Cross-Instance Delegation', () => {
 		const agentB = await api.agents.createAgent({
 			firstName: `StreamBot-${nanoid(8)}`,
 			description: 'Streaming delegation target',
-			agentAccessLevel: 'open',
+			agentAccessLevel: 'external',
 		});
 		await api.projects.addUserToProject(agentProject.id, agentA.id, 'project:editor');
 		await api.projects.addUserToProject(agentProject.id, agentB.id, 'project:editor');

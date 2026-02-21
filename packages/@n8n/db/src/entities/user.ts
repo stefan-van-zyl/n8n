@@ -86,7 +86,7 @@ export class User extends WithTimestamps implements IUser, AuthPrincipal {
 	description: string | null;
 
 	@Column({ type: String, nullable: true, length: 20 })
-	agentAccessLevel: 'open' | 'internal' | 'closed' | null;
+	agentAccessLevel: 'external' | 'internal' | 'closed' | null;
 
 	@Column({ type: Boolean, default: false })
 	disabled: boolean;

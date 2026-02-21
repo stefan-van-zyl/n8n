@@ -10,14 +10,14 @@ export interface AgentResponse {
 	email: string;
 	avatar: string | null;
 	description: string | null;
-	agentAccessLevel: 'open' | 'internal' | 'closed' | null;
+	agentAccessLevel: 'external' | 'internal' | 'closed' | null;
 }
 
 export interface AgentCapabilities {
 	agentId: string;
 	agentName: string;
 	description: string | null;
-	agentAccessLevel: 'open' | 'internal' | 'closed' | null;
+	agentAccessLevel: 'external' | 'internal' | 'closed' | null;
 	projects: Array<{ id: string; name: string }>;
 	workflows: Array<{ id: string; name: string; active: boolean }>;
 	credentials: Array<{ id: string; name: string; type: string }>;
@@ -54,7 +54,7 @@ export class AgentApiHelper {
 	async createAgent(options?: {
 		firstName?: string;
 		description?: string;
-		agentAccessLevel?: 'open' | 'internal' | 'closed';
+		agentAccessLevel?: 'external' | 'internal' | 'closed';
 		avatar?: string;
 	}): Promise<AgentResponse> {
 		const firstName = options?.firstName ?? `Agent-${nanoid(8)}`;
@@ -83,7 +83,7 @@ export class AgentApiHelper {
 		data: {
 			firstName?: string;
 			description?: string;
-			agentAccessLevel?: 'open' | 'internal' | 'closed';
+			agentAccessLevel?: 'external' | 'internal' | 'closed';
 			avatar?: string;
 		},
 	): Promise<AgentResponse> {
@@ -140,6 +140,12 @@ export class AgentApiHelper {
 		return result.data ?? result;
 	}
 
+	async dispatchTaskRaw(agentId: string, prompt: string) {
+		return await this.api.request.post(`/rest/agents/${agentId}/task`, {
+			data: { prompt },
+		});
+	}
+
 	async dispatchTaskWithExternalAgents(
 		agentId: string,
 		prompt: string,
@@ -194,5 +200,12 @@ export class AgentApiHelper {
 		}
 
 		return (await response.json()) as AgentTaskResult;
+	}
+
+	async dispatchTaskViaPublicApiRaw(agentId: string, prompt: string, apiKey: string) {
+		return await this.api.request.post(`/api/v1/agents/${agentId}/task`, {
+			data: { prompt },
+			headers: { 'x-n8n-api-key': apiKey },
+		});
 	}
 }
