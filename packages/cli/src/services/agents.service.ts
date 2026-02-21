@@ -31,6 +31,7 @@ import { CredentialsHelper } from '@/credentials-helper';
 import { CredentialsService } from '@/credentials/credentials.service';
 import { ForbiddenError } from '@/errors/response-errors/forbidden.error';
 import { NotFoundError } from '@/errors/response-errors/not-found.error';
+import { Push } from '@/push';
 import { WorkflowRunner } from '@/workflow-runner';
 import * as WorkflowExecuteAdditionalData from '@/workflow-execute-additional-data';
 import { WorkflowFinderService } from '@/workflows/workflow-finder.service';
@@ -120,7 +121,26 @@ export class AgentsService {
 		private readonly workflowFinderService: WorkflowFinderService,
 		private readonly workflowRunner: WorkflowRunner,
 		private readonly activeExecutions: ActiveExecutions,
+		private readonly push: Push,
 	) {}
+
+	private broadcastAgentEvent(agentId: string, event: Record<string, unknown>) {
+		this.push.broadcast({
+			type: 'agentTaskStep',
+			data: { agentId, event },
+		});
+	}
+
+	private broadcastAgentDone(agentId: string, result: AgentTaskResult) {
+		this.push.broadcast({
+			type: 'agentTaskDone',
+			data: {
+				agentId,
+				status: result.status,
+				summary: result.summary ?? result.message,
+			},
+		});
+	}
 
 	async createAgent(payload: {
 		firstName: string;
@@ -374,18 +394,56 @@ export class AgentsService {
 			callChain?: Set<string>;
 		},
 	): Promise<AgentTaskResult> {
-		const { onStep, externalAgents, callChain = new Set<string>() } = options ?? {};
+		const { onStep: originalOnStep, externalAgents, callChain = new Set<string>() } = options ?? {};
+
+		const onStep: StepCallback | undefined = (event) => {
+			originalOnStep?.(event);
+			this.broadcastAgentEvent(agentId, event);
+		};
 
 		// Cycle detection
 		if (callChain.has(agentId)) {
-			return {
+			const result: AgentTaskResult = {
 				status: 'error',
 				message: `Delegation cycle detected: agent ${agentId} is already in the call chain.`,
 				steps: [],
 			};
+			this.broadcastAgentDone(agentId, result);
+			return result;
 		}
 		callChain.add(agentId);
 
+		let result: AgentTaskResult;
+		try {
+			result = await this.executeAgentTaskInner(
+				agentId,
+				prompt,
+				budget,
+				onStep,
+				externalAgents,
+				callChain,
+			);
+		} catch (error) {
+			this.broadcastAgentDone(agentId, {
+				status: 'error',
+				steps: [],
+				message: error instanceof Error ? error.message : String(error),
+			});
+			throw error;
+		}
+
+		this.broadcastAgentDone(agentId, result);
+		return result;
+	}
+
+	private async executeAgentTaskInner(
+		agentId: string,
+		prompt: string,
+		budget: IterationBudget,
+		onStep: StepCallback | undefined,
+		externalAgents: ExternalAgentConfig[] | undefined,
+		callChain: Set<string>,
+	): Promise<AgentTaskResult> {
 		const agentUser = await this.userRepository.findOne({
 			where: { id: agentId, type: 'agent' },
 			relations: ['role'],

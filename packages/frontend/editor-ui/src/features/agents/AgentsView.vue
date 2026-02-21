@@ -72,6 +72,7 @@ let resizeObserver: ResizeObserver | null = null;
 
 onMounted(async () => {
 	await agentsStore.fetchAgents();
+	agentsStore.initializePushListener();
 
 	if (canvasRef.value) {
 		const { clientWidth, clientHeight } = canvasRef.value;
@@ -88,6 +89,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+	agentsStore.teardownPushListener();
 	resizeObserver?.disconnect();
 });
 

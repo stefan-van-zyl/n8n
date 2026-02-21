@@ -3,6 +3,8 @@ import type { PushMessage } from '@n8n/api-types';
 
 import { usePushConnectionStore } from '@/app/stores/pushConnection.store';
 import {
+	agentTaskDone,
+	agentTaskStep,
 	builderCreditsUpdated,
 	testWebhookDeleted,
 	testWebhookReceived,
@@ -60,6 +62,10 @@ export function usePushConnection({
 	 */
 	async function processEvent(event: PushMessage) {
 		switch (event.type) {
+			case 'agentTaskStep':
+				return await agentTaskStep(event);
+			case 'agentTaskDone':
+				return await agentTaskDone(event);
 			case 'testWebhookDeleted':
 				return await testWebhookDeleted(event, options);
 			case 'testWebhookReceived':

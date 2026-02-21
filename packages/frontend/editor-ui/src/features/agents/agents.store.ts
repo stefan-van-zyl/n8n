@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import { makeRestApiRequest } from '@n8n/rest-api-client';
 import { useRootStore } from '@n8n/stores/useRootStore';
+import { usePushConnectionStore } from '@/app/stores/pushConnection.store';
 import {
 	getAllProjects,
 	getProject,
@@ -392,6 +393,44 @@ export const useAgentsStore = defineStore('agents', () => {
 		}
 	};
 
+	const pushListenerRemoval = ref<(() => void) | null>(null);
+
+	const initializePushListener = () => {
+		if (pushListenerRemoval.value) return;
+
+		const pushStore = usePushConnectionStore();
+		pushStore.pushConnect();
+
+		pushListenerRemoval.value = pushStore.addEventListener((event) => {
+			if (event.type === 'agentTaskStep') {
+				const stepEvent = event.data.event as Record<string, unknown>;
+				// Only activate on new actions (type: step), not results (type: observation)
+				if (stepEvent.type === 'step') {
+					setAgentStatus(event.data.agentId, 'active');
+					if (stepEvent.action === 'send_message' && typeof stepEvent.toAgent === 'string') {
+						setAgentStatusByName(stepEvent.toAgent, 'active');
+					}
+				}
+			}
+			if (event.type === 'agentTaskDone') {
+				// Reset all agents — sub-agent done events may arrive before
+				// the parent's observation, so reset everything to avoid stale state
+				for (const agent of agents.value) {
+					agent.status = 'idle';
+				}
+			}
+		});
+	};
+
+	const teardownPushListener = () => {
+		if (typeof pushListenerRemoval.value === 'function') {
+			pushListenerRemoval.value();
+			pushListenerRemoval.value = null;
+		}
+		const pushStore = usePushConnectionStore();
+		pushStore.pushDisconnect();
+	};
+
 	return {
 		agents,
 		zones,
@@ -411,5 +450,7 @@ export const useAgentsStore = defineStore('agents', () => {
 		updateAgent,
 		setAgentStatus,
 		setAgentStatusByName,
+		initializePushListener,
+		teardownPushListener,
 	};
 });

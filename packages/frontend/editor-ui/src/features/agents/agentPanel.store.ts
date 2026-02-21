@@ -66,6 +66,8 @@ export const useAgentPanelStore = defineStore('agentPanel', () => {
 		streamingSummary.value = null;
 		isLoading.value = true;
 
+		agentsStore.initializePushListener();
+
 		try {
 			capabilities.value = await makeRestApiRequest<AgentCapabilitiesResponse>(
 				rootStore.restApiContext,
@@ -96,6 +98,8 @@ export const useAgentPanelStore = defineStore('agentPanel', () => {
 		isSubmitting.value = false;
 		isStreaming.value = false;
 		activeConnections.value = new Set();
+
+		agentsStore.teardownPushListener();
 
 		// Reset all agent statuses
 		for (const agent of agentsStore.agents) {

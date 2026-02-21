@@ -620,7 +620,7 @@ function handleEvent(event) {
       break;
 
     case 'observation':
-      updateLastStep(event.result, event.error);
+      updateMatchingStep(event);
       addThinking();
       break;
 
@@ -640,6 +640,9 @@ function addStep(action, workflowName, toAgent, external, status, result) {
   const el = document.createElement('div');
   el.className = `step ${status}`;
   el.dataset.status = status;
+  el.dataset.action = action || '';
+  if (toAgent) el.dataset.toAgent = toAgent;
+  if (workflowName) el.dataset.workflowName = workflowName;
 
   const icon = action === 'execute_workflow' ? '\u2699\uFE0F'
     : action === 'send_message' ? '\uD83D\uDCE4'
@@ -692,6 +695,51 @@ function updateLastStep(result, error) {
       last.querySelector('.step-body').appendChild(resultEl);
     }
     resultEl.textContent = error || result;
+  }
+}
+
+function updateMatchingStep(event) {
+  // Reverse once so we search from newest to oldest
+  const steps = Array.from(document.querySelectorAll('.step')).reverse();
+  let target = null;
+
+  // If the observation has toAgent, find the matching send_message step
+  if (event.toAgent) {
+    target = steps.find(
+      s => s.dataset.action === 'send_message' && s.dataset.toAgent === event.toAgent
+    );
+  }
+
+  // If the observation has workflowName, find the matching execute_workflow step
+  if (!target && event.workflowName) {
+    target = steps.find(
+      s => s.dataset.action === 'execute_workflow' && s.dataset.workflowName === event.workflowName
+    );
+  }
+
+  // Fallback: last running step (first in reversed array)
+  if (!target) {
+    target = steps.find(s => s.dataset.status === 'running') || steps[0];
+  }
+
+  if (!target) return;
+
+  const status = event.error ? 'error' : 'success';
+  target.className = `step ${status}`;
+  target.dataset.status = status;
+
+  const statusEl = target.querySelector('.step-status');
+  if (statusEl) statusEl.innerHTML = statusIcon(status);
+
+  const result = event.error || event.result;
+  if (result) {
+    let resultEl = target.querySelector('.step-result');
+    if (!resultEl) {
+      resultEl = document.createElement('div');
+      resultEl.className = 'step-result';
+      target.querySelector('.step-body').appendChild(resultEl);
+    }
+    resultEl.textContent = result;
   }
 }
 

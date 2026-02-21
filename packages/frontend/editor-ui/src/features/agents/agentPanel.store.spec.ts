@@ -1,14 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
+import type { PushMessage } from '@n8n/api-types';
 import { useAgentPanelStore } from './agentPanel.store';
 import { useAgentsStore } from './agents.store';
 import type { AgentNode } from './agents.types';
+
+// Capture push event handlers so tests can simulate push messages
+let pushEventHandler: ((event: PushMessage) => void) | null = null;
+const mockPushStore = {
+	pushConnect: vi.fn(),
+	pushDisconnect: vi.fn(),
+	addEventListener: vi.fn((handler: (event: PushMessage) => void) => {
+		pushEventHandler = handler;
+		return vi.fn(() => {
+			pushEventHandler = null;
+		});
+	}),
+};
 
 // Mock dependencies the store imports
 vi.mock('@n8n/constants', () => ({ BROWSER_ID_STORAGE_KEY: 'browser-id' }));
 vi.mock('@n8n/rest-api-client', () => ({ makeRestApiRequest: vi.fn() }));
 vi.mock('@n8n/stores/useRootStore', () => ({
 	useRootStore: () => ({ restApiContext: { baseUrl: 'http://localhost:5678/rest' } }),
+}));
+vi.mock('@/app/stores/pushConnection.store', () => ({
+	usePushConnectionStore: () => mockPushStore,
 }));
 
 /** Build an SSE text chunk from a sequence of events */
@@ -134,5 +151,123 @@ describe('agentPanel.store', () => {
 			expect(delegationStep?.result).toBe('success');
 			expect(delegationStep?.status).toBe('success');
 		});
+	});
+});
+
+describe('agents.store – push listener', () => {
+	let agentsStore: ReturnType<typeof useAgentsStore>;
+
+	beforeEach(() => {
+		setActivePinia(createPinia());
+		pushEventHandler = null;
+		mockPushStore.addEventListener.mockClear();
+		mockPushStore.pushConnect.mockClear();
+		mockPushStore.pushDisconnect.mockClear();
+
+		agentsStore = useAgentsStore();
+		agentsStore.agents = [
+			makeAgent({ id: 'qa-1', firstName: 'QA' }),
+			makeAgent({ id: 'comms-1', firstName: 'Comms' }),
+		];
+
+		agentsStore.initializePushListener();
+	});
+
+	function simulatePush(event: PushMessage) {
+		expect(pushEventHandler).not.toBeNull();
+		pushEventHandler!(event);
+	}
+
+	it('should connect push and register listener on initialize', () => {
+		expect(mockPushStore.pushConnect).toHaveBeenCalled();
+		expect(mockPushStore.addEventListener).toHaveBeenCalled();
+	});
+
+	it('should set agent to active on step event', () => {
+		simulatePush({
+			type: 'agentTaskStep',
+			data: {
+				agentId: 'qa-1',
+				event: { type: 'step', action: 'execute_workflow', workflowName: 'Report' },
+			},
+		});
+
+		expect(agentsStore.agents.find((a) => a.id === 'qa-1')?.status).toBe('active');
+		expect(agentsStore.agents.find((a) => a.id === 'comms-1')?.status).toBe('idle');
+	});
+
+	it('should activate target agent on send_message step', () => {
+		simulatePush({
+			type: 'agentTaskStep',
+			data: {
+				agentId: 'qa-1',
+				event: { type: 'step', action: 'send_message', toAgent: 'Comms' },
+			},
+		});
+
+		expect(agentsStore.agents.find((a) => a.id === 'qa-1')?.status).toBe('active');
+		expect(agentsStore.agents.find((a) => a.id === 'comms-1')?.status).toBe('active');
+	});
+
+	it('should NOT re-activate target agent on observation events (regression)', () => {
+		// Step 1: delegation activates both agents
+		simulatePush({
+			type: 'agentTaskStep',
+			data: {
+				agentId: 'qa-1',
+				event: { type: 'step', action: 'send_message', toAgent: 'Comms' },
+			},
+		});
+		expect(agentsStore.agents.find((a) => a.id === 'comms-1')?.status).toBe('active');
+
+		// Step 2: sub-agent completes, resets all to idle
+		simulatePush({
+			type: 'agentTaskDone',
+			data: { agentId: 'comms-1', status: 'completed' },
+		});
+		expect(agentsStore.agents.find((a) => a.id === 'comms-1')?.status).toBe('idle');
+
+		// Step 3: parent's observation fires with toAgent — must NOT re-activate
+		simulatePush({
+			type: 'agentTaskStep',
+			data: {
+				agentId: 'qa-1',
+				event: {
+					type: 'observation',
+					action: 'send_message',
+					toAgent: 'Comms',
+					result: 'success',
+				},
+			},
+		});
+		expect(agentsStore.agents.find((a) => a.id === 'comms-1')?.status).toBe('idle');
+	});
+
+	it('should reset ALL agents to idle on agentTaskDone', () => {
+		// Both agents active
+		agentsStore.setAgentStatus('qa-1', 'active');
+		agentsStore.setAgentStatus('comms-1', 'active');
+
+		// Only QA finishes, but all should reset
+		simulatePush({
+			type: 'agentTaskDone',
+			data: { agentId: 'qa-1', status: 'completed', summary: 'Done' },
+		});
+
+		expect(agentsStore.agents.find((a) => a.id === 'qa-1')?.status).toBe('idle');
+		expect(agentsStore.agents.find((a) => a.id === 'comms-1')?.status).toBe('idle');
+	});
+
+	it('should ignore observation events entirely (no status change)', () => {
+		simulatePush({
+			type: 'agentTaskStep',
+			data: {
+				agentId: 'qa-1',
+				event: { type: 'observation', action: 'execute_workflow', result: 'success' },
+			},
+		});
+
+		// Agent should remain idle — observations don't activate
+		expect(agentsStore.agents.find((a) => a.id === 'qa-1')?.status).toBe('idle');
 	});
 });

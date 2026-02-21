@@ -64,7 +64,7 @@ test.describe('Agent Access Control', () => {
 			const member = await api.publicApi.createUser({ role: 'global:member' });
 			const memberApi = await api.createApiForUser(member);
 
-			const project = await api.projects.createProject('Shared Project');
+			const project = await api.projects.createProject(`Shared-${nanoid(8)}`);
 			await api.projects.addUserToProject(project.id, agent.id, 'project:editor');
 			await api.projects.addUserToProject(project.id, member.id, 'project:editor');
 
@@ -109,7 +109,7 @@ test.describe('Agent Access Control', () => {
 			const member = await api.publicApi.createUser({ role: 'global:member' });
 			const memberApi = await api.createApiForUser(member);
 
-			const project = await api.projects.createProject('Shared Project');
+			const project = await api.projects.createProject(`Shared-${nanoid(8)}`);
 			await api.projects.addUserToProject(project.id, agent.id, 'project:editor');
 			await api.projects.addUserToProject(project.id, member.id, 'project:editor');
 
