@@ -95,6 +95,10 @@ export interface AgentTaskResult {
 	message?: string;
 }
 
+export function sseWrite(res: { write: (chunk: string) => void }, event: Record<string, unknown>) {
+	res.write(`data: ${JSON.stringify(event)}\n\n`);
+}
+
 @Service()
 export class AgentsService {
 	constructor(
@@ -317,6 +321,27 @@ export class AgentsService {
 		};
 	}
 
+	private recordObservation(
+		steps: TaskStep[],
+		messages: LlmMessage[],
+		onStep: StepCallback | undefined,
+		observation: {
+			action: string;
+			result: string;
+			message: string;
+			extra?: Record<string, unknown>;
+		},
+	) {
+		steps[steps.length - 1].result = observation.result;
+		messages.push({ role: 'user', content: `Observation: ${observation.message}` });
+		onStep?.({
+			type: 'observation',
+			action: observation.action,
+			result: observation.result,
+			...observation.extra,
+		});
+	}
+
 	async executeAgentTask(
 		agentId: string,
 		prompt: string,
@@ -460,29 +485,20 @@ export class AgentsService {
 
 				try {
 					const result = await this.runWorkflow(agentUser, parsed.workflowId, prompt);
-					const observation = `Workflow "${workflowName}" executed. Result: ${jsonStringify(result).slice(0, 2000)}`;
 					const stepResult = result.success ? 'success' : 'failed';
-					steps[steps.length - 1].result = stepResult;
-					messages.push({ role: 'user', content: `Observation: ${observation}` });
-					onStep?.({
-						type: 'observation',
+					this.recordObservation(steps, messages, onStep, {
 						action: 'execute_workflow',
-						workflowName,
 						result: stepResult,
+						message: `Workflow "${workflowName}" executed. Result: ${jsonStringify(result).slice(0, 2000)}`,
+						extra: { workflowName },
 					});
 				} catch (error) {
 					const errorMsg = error instanceof Error ? error.message : String(error);
-					steps[steps.length - 1].result = 'error';
-					messages.push({
-						role: 'user',
-						content: `Observation: Workflow execution failed: ${errorMsg}`,
-					});
-					onStep?.({
-						type: 'observation',
+					this.recordObservation(steps, messages, onStep, {
 						action: 'execute_workflow',
-						workflowName,
 						result: 'error',
-						error: errorMsg,
+						message: `Workflow execution failed: ${errorMsg}`,
+						extra: { workflowName, error: errorMsg },
 					});
 				}
 			} else if (
@@ -509,32 +525,20 @@ export class AgentsService {
 				if (externalAgent) {
 					try {
 						const result = await callExternalAgent(externalAgent, parsed.message);
-						const observation = `Agent "${targetName}" responded: ${result.summary ?? 'No summary'}`;
 						const stepResult = result.status === 'completed' ? 'success' : 'failed';
-						steps[steps.length - 1].result = stepResult;
-						messages.push({ role: 'user', content: `Observation: ${observation}` });
-						onStep?.({
-							type: 'observation',
+						this.recordObservation(steps, messages, onStep, {
 							action: 'send_message',
-							toAgent: targetName,
 							result: stepResult,
-							summary: result.summary,
-							external: true,
+							message: `Agent "${targetName}" responded: ${result.summary ?? 'No summary'}`,
+							extra: { toAgent: targetName, summary: result.summary, external: true },
 						});
 					} catch (error) {
 						const errorMsg = error instanceof Error ? error.message : String(error);
-						steps[steps.length - 1].result = 'error';
-						messages.push({
-							role: 'user',
-							content: `Observation: External agent delegation failed: ${errorMsg}`,
-						});
-						onStep?.({
-							type: 'observation',
+						this.recordObservation(steps, messages, onStep, {
 							action: 'send_message',
-							toAgent: targetName,
 							result: 'error',
-							error: errorMsg,
-							external: true,
+							message: `External agent delegation failed: ${errorMsg}`,
+							extra: { toAgent: targetName, error: errorMsg, external: true },
 						});
 					}
 				} else {
@@ -543,30 +547,18 @@ export class AgentsService {
 					});
 
 					if (!targetAgent) {
-						steps[steps.length - 1].result = 'error';
-						messages.push({
-							role: 'user',
-							content: `Observation: Agent "${targetName}" not found. Available agents: ${otherAgents.map((a) => `${a.firstName} (id: ${a.id})`).join(', ')}`,
-						});
-						onStep?.({
-							type: 'observation',
+						this.recordObservation(steps, messages, onStep, {
 							action: 'send_message',
-							toAgent: targetName,
 							result: 'error',
-							error: 'Agent not found',
+							message: `Agent "${targetName}" not found. Available agents: ${otherAgents.map((a) => `${a.firstName} (id: ${a.id})`).join(', ')}`,
+							extra: { toAgent: targetName, error: 'Agent not found' },
 						});
 					} else if (targetAgent.agentAccessLevel === 'closed') {
-						steps[steps.length - 1].result = 'error';
-						messages.push({
-							role: 'user',
-							content: `Observation: Agent "${targetName}" is not accessible.`,
-						});
-						onStep?.({
-							type: 'observation',
+						this.recordObservation(steps, messages, onStep, {
 							action: 'send_message',
-							toAgent: targetName,
 							result: 'error',
-							error: 'Agent not accessible',
+							message: `Agent "${targetName}" is not accessible.`,
+							extra: { toAgent: targetName, error: 'Agent not accessible' },
 						});
 					} else {
 						try {
@@ -574,30 +566,20 @@ export class AgentsService {
 								onStep,
 								callChain,
 							});
-							const observation = `Agent "${targetName}" responded: ${result.summary ?? 'No summary'}`;
 							const stepResult = result.status === 'completed' ? 'success' : 'failed';
-							steps[steps.length - 1].result = stepResult;
-							messages.push({ role: 'user', content: `Observation: ${observation}` });
-							onStep?.({
-								type: 'observation',
+							this.recordObservation(steps, messages, onStep, {
 								action: 'send_message',
-								toAgent: targetName,
 								result: stepResult,
-								summary: result.summary,
+								message: `Agent "${targetName}" responded: ${result.summary ?? 'No summary'}`,
+								extra: { toAgent: targetName, summary: result.summary },
 							});
 						} catch (error) {
 							const errorMsg = error instanceof Error ? error.message : String(error);
-							steps[steps.length - 1].result = 'error';
-							messages.push({
-								role: 'user',
-								content: `Observation: Agent delegation failed: ${errorMsg}`,
-							});
-							onStep?.({
-								type: 'observation',
+							this.recordObservation(steps, messages, onStep, {
 								action: 'send_message',
-								toAgent: targetName,
 								result: 'error',
-								error: errorMsg,
+								message: `Agent delegation failed: ${errorMsg}`,
+								extra: { toAgent: targetName, error: errorMsg },
 							});
 						}
 					}

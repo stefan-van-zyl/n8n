@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// N8nAvatar only supports name-based initials (marble pattern).
+// Agent avatars need emoji and image URL support, so we keep this custom component.
 import { computed } from 'vue';
 import type { AgentAvatar } from '../agents.types';
 

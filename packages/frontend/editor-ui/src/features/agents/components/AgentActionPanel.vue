@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { N8nButton, N8nCallout, N8nHeading, N8nIcon, N8nText } from '@n8n/design-system';
+import {
+	N8nBadge,
+	N8nButton,
+	N8nCallout,
+	N8nHeading,
+	N8nIcon,
+	N8nInput,
+	N8nText,
+} from '@n8n/design-system';
 import { useAgentPanelStore } from '../agentPanel.store';
 import AgentAvatarComp from './AgentAvatar.vue';
 
@@ -81,7 +89,12 @@ function stepStatusIcon(status: string) {
 </script>
 
 <template>
-	<aside :class="$style.panel" data-testid="agent-action-panel">
+	<aside
+		role="complementary"
+		aria-label="Agent details"
+		:class="$style.panel"
+		data-testid="agent-action-panel"
+	>
 		<!-- Header -->
 		<div :class="$style.header">
 			<div :class="$style.headerInfo">
@@ -91,7 +104,7 @@ function stepStatusIcon(status: string) {
 					<button
 						:class="$style.avatarEditBtn"
 						data-testid="agent-edit-avatar"
-						title="Edit avatar"
+						aria-label="Edit avatar"
 						@click="startEditAvatar"
 					>
 						<N8nIcon icon="pen" size="xsmall" />
@@ -100,20 +113,25 @@ function stepStatusIcon(status: string) {
 				<div>
 					<!-- Editable name -->
 					<div v-if="isEditingName" :class="$style.editRow">
-						<input
+						<N8nInput
 							v-model="editName"
-							:class="$style.editInput"
+							size="small"
 							data-testid="agent-edit-name-input"
-							maxlength="32"
+							:maxlength="32"
 							@keydown.enter="saveName"
 							@keydown.escape="cancelEditName"
 						/>
-						<button :class="$style.editAction" @click="saveName">
+						<N8nButton size="mini" type="tertiary" aria-label="Save name" @click="saveName">
 							<N8nIcon icon="check" size="xsmall" />
-						</button>
-						<button :class="$style.editAction" @click="cancelEditName">
+						</N8nButton>
+						<N8nButton
+							size="mini"
+							type="tertiary"
+							aria-label="Cancel editing name"
+							@click="cancelEditName"
+						>
 							<N8nIcon icon="x" size="xsmall" />
-						</button>
+						</N8nButton>
 					</div>
 					<div v-else :class="$style.nameRow">
 						<N8nHeading bold tag="h3" size="medium">
@@ -122,7 +140,7 @@ function stepStatusIcon(status: string) {
 						<button
 							:class="$style.inlineEditBtn"
 							data-testid="agent-edit-name"
-							title="Edit name"
+							aria-label="Edit name"
 							@click="startEditName"
 						>
 							<N8nIcon icon="pen" size="xsmall" />
@@ -137,6 +155,7 @@ function stepStatusIcon(status: string) {
 			<button
 				:class="$style.closeBtn"
 				data-testid="agent-panel-close"
+				aria-label="Close panel"
 				@click="panelStore.closePanel()"
 			>
 				<N8nIcon icon="x" size="medium" />
@@ -145,12 +164,12 @@ function stepStatusIcon(status: string) {
 
 		<!-- Avatar edit popover -->
 		<div v-if="isEditingAvatar" :class="$style.avatarEditRow" data-testid="agent-avatar-edit-row">
-			<input
+			<N8nInput
 				v-model="editAvatar"
-				:class="$style.editInput"
+				size="small"
 				placeholder="Emoji or image URL"
 				data-testid="agent-edit-avatar-input"
-				maxlength="255"
+				:maxlength="255"
 				@keydown.enter="saveAvatar"
 				@keydown.escape="cancelEditAvatar"
 			/>
@@ -168,7 +187,7 @@ function stepStatusIcon(status: string) {
 		<div v-else :class="$style.content">
 			<!-- Workflows -->
 			<section :class="$style.section">
-				<div :class="$style.sectionTitle">Workflows</div>
+				<N8nText tag="h4" size="small" bold :class="$style.sectionTitle">Workflows</N8nText>
 				<div v-if="panelStore.capabilities?.workflows.length" :class="$style.list">
 					<div
 						v-for="wf in panelStore.capabilities.workflows"
@@ -177,9 +196,9 @@ function stepStatusIcon(status: string) {
 					>
 						<N8nIcon icon="workflow" :class="$style.itemIcon" size="small" />
 						<span :class="$style.itemName">{{ wf.name }}</span>
-						<span :class="[$style.badge, wf.active ? $style.badgeActive : $style.badgeInactive]">
+						<N8nBadge :theme="wf.active ? 'success' : 'default'" size="small">
 							{{ wf.active ? 'Active' : 'Inactive' }}
-						</span>
+						</N8nBadge>
 					</div>
 				</div>
 				<N8nText v-else color="text-light" size="small">No workflows accessible</N8nText>
@@ -187,7 +206,7 @@ function stepStatusIcon(status: string) {
 
 			<!-- Credentials -->
 			<section :class="$style.section">
-				<div :class="$style.sectionTitle">Credentials</div>
+				<N8nText tag="h4" size="small" bold :class="$style.sectionTitle">Credentials</N8nText>
 				<div v-if="panelStore.capabilities?.credentials.length" :class="$style.list">
 					<div
 						v-for="cred in panelStore.capabilities.credentials"
@@ -204,7 +223,7 @@ function stepStatusIcon(status: string) {
 
 			<!-- Connected Agents -->
 			<section v-if="panelStore.connectedAgents.length" :class="$style.section">
-				<div :class="$style.sectionTitle">Connected Agents</div>
+				<N8nText tag="h4" size="small" bold :class="$style.sectionTitle">Connected Agents</N8nText>
 				<div :class="$style.list">
 					<div v-for="agent in panelStore.connectedAgents" :key="agent.id" :class="$style.listItem">
 						<AgentAvatarComp :avatar="agent.avatar" size="small" />
@@ -215,14 +234,15 @@ function stepStatusIcon(status: string) {
 
 			<!-- Task Input -->
 			<section :class="$style.section">
-				<div :class="$style.sectionTitle">Run a Task</div>
+				<N8nText tag="h4" size="small" bold :class="$style.sectionTitle">Run a Task</N8nText>
 				<N8nCallout v-if="!panelStore.llmConfigured" theme="warning" :class="$style.llmWarning">
 					No LLM credential found. Share an Anthropic credential with this agent to enable task
 					execution.
 				</N8nCallout>
-				<textarea
+				<N8nInput
 					v-model="taskPrompt"
-					:class="$style.taskInput"
+					type="textarea"
+					:rows="3"
 					placeholder="Describe what this agent should do..."
 					data-testid="agent-task-input"
 					:disabled="panelStore.isSubmitting"
@@ -244,7 +264,7 @@ function stepStatusIcon(status: string) {
 				v-if="panelStore.streamingSteps.length || panelStore.isStreaming"
 				:class="$style.section"
 			>
-				<div :class="$style.sectionTitle">Live Progress</div>
+				<N8nText tag="h4" size="small" bold :class="$style.sectionTitle">Live Progress</N8nText>
 				<div :class="$style.streamSteps">
 					<div
 						v-for="(step, i) in panelStore.streamingSteps"
@@ -298,7 +318,7 @@ function stepStatusIcon(status: string) {
 				v-if="panelStore.taskResult && !panelStore.streamingSteps.length"
 				:class="$style.section"
 			>
-				<div :class="$style.sectionTitle">Result</div>
+				<N8nText tag="h4" size="small" bold :class="$style.sectionTitle">Result</N8nText>
 				<div
 					:class="[
 						$style.resultBox,
@@ -411,37 +431,6 @@ function stepStatusIcon(status: string) {
 	gap: var(--spacing--4xs);
 }
 
-.editInput {
-	padding: var(--spacing--4xs) var(--spacing--2xs);
-	border: var(--border);
-	border-radius: var(--radius);
-	font-family: var(--font-family);
-	font-size: var(--font-size--sm);
-	color: var(--color--text);
-	background: var(--color--background);
-	min-width: 0;
-	flex: 1;
-
-	&:focus {
-		outline: none;
-		border-color: var(--color--primary);
-	}
-}
-
-.editAction {
-	background: none;
-	border: none;
-	color: var(--color--text--tint-2);
-	cursor: pointer;
-	padding: var(--spacing--4xs);
-	display: flex;
-	align-items: center;
-
-	&:hover {
-		color: var(--color--primary);
-	}
-}
-
 .avatarEditRow {
 	display: flex;
 	align-items: center;
@@ -530,53 +519,8 @@ function stepStatusIcon(status: string) {
 	white-space: nowrap;
 }
 
-.badge {
-	font-size: var(--font-size--3xs);
-	padding: 1px var(--spacing--4xs);
-	border-radius: var(--radius);
-	flex-shrink: 0;
-	font-weight: var(--font-weight--bold);
-}
-
-.badgeActive {
-	background: var(--color--success--tint-3);
-	color: var(--color--success--shade-1);
-}
-
-.badgeInactive {
-	background: var(--color--foreground--tint-2);
-	color: var(--color--text--tint-2);
-}
-
 .llmWarning {
 	margin-bottom: var(--spacing--2xs);
-}
-
-.taskInput {
-	width: 100%;
-	min-height: 80px;
-	padding: var(--spacing--2xs);
-	border: var(--border);
-	border-radius: var(--radius);
-	font-family: var(--font-family);
-	font-size: var(--font-size--sm);
-	color: var(--color--text);
-	background: var(--color--background);
-	resize: vertical;
-	box-sizing: border-box;
-
-	&::placeholder {
-		color: var(--color--text--tint-2);
-	}
-
-	&:focus {
-		outline: none;
-		border-color: var(--color--primary);
-	}
-
-	&:disabled {
-		opacity: 0.6;
-	}
 }
 
 .runBtn {

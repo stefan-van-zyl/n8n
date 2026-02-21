@@ -13,11 +13,7 @@ import {
 import type { Request, Response } from 'express';
 
 import type { ExternalAgentConfig } from '@/services/agents.service';
-import { AgentsService, MAX_ITERATIONS } from '@/services/agents.service';
-
-function sseWrite(res: Response, event: Record<string, unknown>) {
-	res.write(`data: ${JSON.stringify(event)}\n\n`);
-}
+import { AgentsService, MAX_ITERATIONS, sseWrite } from '@/services/agents.service';
 
 @RestController('/agents')
 export class AgentsController {
@@ -89,14 +85,12 @@ export class AgentsController {
 		const callChain = new Set<string>();
 
 		if (!wantsStream) {
-			const result = await this.agentsService.executeAgentTask(
+			return await this.agentsService.executeAgentTask(
 				agentId,
 				prompt,
 				{ remaining: MAX_ITERATIONS },
 				{ externalAgents: externalAgents as ExternalAgentConfig[] | undefined, callChain },
 			);
-			res.json(result);
-			return;
 		}
 
 		res.writeHead(200, {

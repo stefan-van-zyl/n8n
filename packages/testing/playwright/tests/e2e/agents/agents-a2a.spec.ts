@@ -303,7 +303,7 @@ test.describe('Agent Task Streaming', () => {
 			data: {
 				prompt: `Execute the workflow named "${workflowName}" and report the result.`,
 			},
-			timeout: 120_000,
+			timeout: 60_000,
 		});
 
 		expect(response.ok()).toBe(true);
@@ -390,7 +390,7 @@ test.describe('Agent Task Execution', () => {
 			data: {
 				prompt: `Execute the workflow named "${workflowName}" and report the result.`,
 			},
-			timeout: 120_000,
+			timeout: 60_000,
 		});
 
 		expect(response.ok()).toBe(true);
@@ -511,7 +511,7 @@ test.describe.skip('Agent Cross-Instance Delegation', () => {
 					},
 				],
 			},
-			timeout: 120_000,
+			timeout: 60_000,
 		});
 
 		expect(response.ok()).toBe(true);

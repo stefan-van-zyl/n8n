@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { N8nBadge } from '@n8n/design-system';
 import type { AgentNode } from './agents.types';
 import AgentAvatarComp from './components/AgentAvatar.vue';
 
@@ -35,6 +36,9 @@ function onPointerDown(event: PointerEvent) {
 
 <template>
 	<div
+		role="button"
+		:aria-label="`Agent ${agent.firstName}`"
+		tabindex="0"
 		:class="[
 			$style.card,
 			{ [$style.selected]: selected },
@@ -57,10 +61,14 @@ function onPointerDown(event: PointerEvent) {
 				<div :class="$style.name">{{ agent.firstName }}</div>
 				<div :class="$style.role">{{ agent.role }}</div>
 			</div>
-			<div :class="$style.statusBadge" :style="{ '--status--color': status.color }">
-				<span :class="$style.statusDot" />
-				<span :class="$style.statusLabel">{{ status.label }}</span>
-			</div>
+			<N8nBadge
+				:theme="
+					agent.status === 'active' ? 'success' : agent.status === 'busy' ? 'warning' : 'default'
+				"
+				size="small"
+			>
+				{{ status.label }}
+			</N8nBadge>
 		</div>
 
 		<!-- Stats row -->
@@ -178,32 +186,6 @@ function onPointerDown(event: PointerEvent) {
 	font-size: var(--font-size--3xs);
 	color: var(--color--text--tint-2);
 	white-space: nowrap;
-}
-
-.statusBadge {
-	display: flex;
-	align-items: center;
-	gap: var(--spacing--4xs);
-	padding: 2px var(--spacing--3xs);
-	border-radius: var(--radius);
-	background: color-mix(in srgb, var(--status--color) 12%, transparent);
-	flex-shrink: 0;
-	margin-left: auto;
-}
-
-.statusDot {
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
-	background: var(--status--color);
-}
-
-.statusLabel {
-	font-size: var(--font-size--3xs);
-	font-weight: var(--font-weight--bold);
-	color: var(--color--text--tint-1);
-	text-transform: uppercase;
-	letter-spacing: 0.3px;
 }
 
 .statsRow {

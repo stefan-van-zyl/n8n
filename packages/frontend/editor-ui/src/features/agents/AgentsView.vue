@@ -1,6 +1,14 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref } from 'vue';
-import { N8nButton, N8nHeading, N8nText } from '@n8n/design-system';
+import { onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import {
+	N8nButton,
+	N8nDialog,
+	N8nDialogClose,
+	N8nDialogFooter,
+	N8nHeading,
+	N8nInput,
+	N8nText,
+} from '@n8n/design-system';
 import { useAgentsStore, ZONE_COLORS } from './agents.store';
 import { useAgentPanelStore } from './agentPanel.store';
 import AgentCard from './AgentCard.vue';
@@ -43,11 +51,12 @@ async function onCreateAgent() {
 	}
 }
 
-function onCancelAdd() {
-	showAddDialog.value = false;
-	newAgentName.value = '';
-	newAgentAvatar.value = '';
-}
+watch(showAddDialog, (open) => {
+	if (!open) {
+		newAgentName.value = '';
+		newAgentAvatar.value = '';
+	}
+});
 
 let dragState: {
 	agentId: string;
@@ -191,45 +200,47 @@ function onRemoveConnection(lineId: string) {
 		</div>
 
 		<!-- Add Agent Dialog -->
-		<div v-if="showAddDialog" :class="$style.dialogOverlay" @click.self="onCancelAdd">
-			<div :class="$style.dialog" data-testid="add-agent-dialog">
-				<N8nHeading bold tag="h3" size="medium">Add Agent</N8nHeading>
-				<div :class="$style.dialogField">
-					<label :class="$style.dialogLabel">Name</label>
-					<input
-						v-model="newAgentName"
-						:class="$style.dialogInput"
-						type="text"
-						placeholder="e.g. Docs Curator"
-						data-testid="add-agent-name"
-						maxlength="32"
-						@keydown.enter="onCreateAgent"
-					/>
-				</div>
-				<div :class="$style.dialogField">
-					<label :class="$style.dialogLabel">Avatar (emoji or URL, optional)</label>
-					<input
-						v-model="newAgentAvatar"
-						:class="$style.dialogInput"
-						type="text"
-						data-testid="add-agent-avatar"
-						maxlength="255"
-						@keydown.enter="onCreateAgent"
-					/>
-				</div>
-				<div :class="$style.dialogActions">
-					<N8nButton label="Cancel" type="tertiary" size="small" @click="onCancelAdd" />
-					<N8nButton
-						label="Create"
-						size="small"
-						:disabled="!newAgentName.trim() || isCreating"
-						:loading="isCreating"
-						data-testid="add-agent-submit"
-						@click="onCreateAgent"
-					/>
-				</div>
+		<N8nDialog
+			:open="showAddDialog"
+			size="small"
+			header="Add Agent"
+			data-testid="add-agent-dialog"
+			@update:open="showAddDialog = $event"
+		>
+			<div :class="$style.dialogField">
+				<N8nText tag="label" size="small" bold>Name</N8nText>
+				<N8nInput
+					v-model="newAgentName"
+					placeholder="e.g. Docs Curator"
+					:maxlength="32"
+					data-testid="add-agent-name"
+					@keydown.enter="onCreateAgent"
+				/>
 			</div>
-		</div>
+			<div :class="$style.dialogField">
+				<N8nText tag="label" size="small" bold>Avatar (emoji or URL, optional)</N8nText>
+				<N8nInput
+					v-model="newAgentAvatar"
+					placeholder="🤖 or https://..."
+					:maxlength="255"
+					data-testid="add-agent-avatar"
+					@keydown.enter="onCreateAgent"
+				/>
+			</div>
+			<N8nDialogFooter>
+				<N8nDialogClose as-child>
+					<N8nButton label="Cancel" type="tertiary" size="small" />
+				</N8nDialogClose>
+				<N8nButton
+					label="Create"
+					size="small"
+					:disabled="!newAgentName.trim() || isCreating"
+					:loading="isCreating"
+					data-testid="add-agent-submit"
+					@click="onCreateAgent"
+				/>
+			</N8nDialogFooter>
+		</N8nDialog>
 		<div :class="$style.body">
 			<div ref="canvasRef" :class="$style.canvas" data-testid="agents-canvas">
 				<!-- Layer 1: Permission Zones -->
@@ -327,58 +338,9 @@ function onRemoveConnection(lineId: string) {
 	margin-left: auto;
 }
 
-.dialogOverlay {
-	position: fixed;
-	inset: 0;
-	background: rgba(0, 0, 0, 0.3);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	z-index: 100;
-}
-
-.dialog {
-	background: var(--color--background);
-	border-radius: var(--radius--lg);
-	padding: var(--spacing--lg);
-	width: 360px;
-	display: flex;
-	flex-direction: column;
-	gap: var(--spacing--sm);
-	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-}
-
 .dialogField {
 	display: flex;
 	flex-direction: column;
 	gap: var(--spacing--4xs);
-}
-
-.dialogLabel {
-	font-size: var(--font-size--2xs);
-	font-weight: var(--font-weight--bold);
-	color: var(--color--text--tint-1);
-}
-
-.dialogInput {
-	padding: var(--spacing--2xs) var(--spacing--xs);
-	border: var(--border);
-	border-radius: var(--radius);
-	font-family: var(--font-family);
-	font-size: var(--font-size--sm);
-	color: var(--color--text);
-	background: var(--color--background);
-
-	&:focus {
-		outline: none;
-		border-color: var(--color--primary);
-	}
-}
-
-.dialogActions {
-	display: flex;
-	justify-content: flex-end;
-	gap: var(--spacing--2xs);
-	margin-top: var(--spacing--2xs);
 }
 </style>

@@ -3,13 +3,9 @@ import type express from 'express';
 
 import type { AuthenticatedRequest } from '@n8n/db';
 import type { ExternalAgentConfig } from '@/services/agents.service';
-import { AgentsService, MAX_ITERATIONS } from '@/services/agents.service';
+import { AgentsService, MAX_ITERATIONS, sseWrite } from '@/services/agents.service';
 
 import { apiKeyHasScope } from '../../shared/middlewares/global.middleware';
-
-function sseWrite(res: express.Response, event: Record<string, unknown>) {
-	res.write(`data: ${JSON.stringify(event)}\n\n`);
-}
 
 export = {
 	getAgentCard: [
